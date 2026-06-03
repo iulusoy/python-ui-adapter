@@ -1,21 +1,55 @@
-# add your desired knowledge graph components here
-
+#-------------------------------------------------------------------
+#-------------------------      NODES      -------------------------
+#-------------------------------------------------------------------
+#====   PARENT NODES
 protein:
     represented_as: node
     preferred_id: uniprot
     input_label: uniprot_protein
 
-disease:
-    represented_as: node
-    preferred_id: doid
-    input_label: do_disease
-
-protein interaction:
+#-------------------------------------------------------------------
+#------------------      RELATIONSHIPS (EDGES)     -----------------
+#-------------------------------------------------------------------
+#====   PARENT EDGES
+protein protein interaction:
     is_a: pairwise molecular interaction
     represented_as: edge
     input_label: protein_protein_interaction
+    properties:
+        is_directed: bool
+        is_stimulation: bool
+        is_inhibition: bool
+        consensus_direction: bool
+        consensus_stimulation: bool
+        consensus_inhibition: bool
 
-protein to disease association:
-    is_a: association
+#====   INHERITED EDGES
+activation:
+    is_a: protein protein interaction
+    inherit_properties: true
     represented_as: edge
-    input_label: protein_disease_association
+    input_label: activation
+
+binding:
+    is_a: protein protein interaction
+    inherit_properties: true
+    represented_as: edge
+    input_label: binding
+
+inhibition:
+    is_a: protein protein interaction
+    inherit_properties: true
+    represented_as: edge
+    input_label: inhibition
+
+phosphorylation:
+    is_a: protein protein interaction
+    inherit_properties: true
+    represented_as: edge
+    input_label: phosphorylation
+
+ubiquitination:
+    is_a: protein protein interaction
+    inherit_properties: true
+    represented_as: edge
+    input_label: ubiquitination
