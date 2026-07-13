@@ -1,207 +1,123 @@
-# BioCypher project template
+# BioCypher Python code adapter, synthetic protein data
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![BioCypher](https://img.shields.io/badge/BioCypher-Adapter-0A7A5A.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Tests](https://img.shields.io/badge/Tests-pytest-6D4C41.svg)
+[![CI](https://github.com/iulusoy/python-ui-adapter/actions/workflows/ci.yaml/badge.svg)](https://github.com/iulusoy/python-ui-adapter/actions/workflows/ci.yaml)
+![Croissant Metadata](https://img.shields.io/badge/Croissant-Metadata-blue)
 
-> [!NOTE]
-> This template is deprecated. In the future, we will maintain our
-> [cookiecutter](https://github.com/biocypher/biocypher-cookiecutter-template)
-> template instead.
+This repository contains the code for the Python UI pathway, to create a knowledge graph from a tabular protein interaction dataset using [BioCypher](https://biocypher.org/) and Python code. The following files and folders can be found in this repo:
 
-A quick way to set up a BioCypher-driven knowledge graph pipeline. Please make
-sure to refer to the [Usage](#-usage) section for details on how it works.
+- a synthetic input dataset (`data/in/synthetic_protein_interactions.tsv`)
+- a BioCypher schema (`config/schema_config.yaml`)
+- a BioCypher runtime config (`config/biocypher_config.yaml`)
+- Python code to prepare the nodes and edges tuples for BioCypher (`src/adapters/adapter_syntehtic_proteins.py`)
 
-## Using the GitHub Template functionality
+The `data` folder is thus responsible for holding the input data (the dataset can also be pulled from the web on-the-fly, but for convenience we have included it here). The `config` folder contains all configuration files. Upon running `create_knowledge_graph.py`, the directories `biocypher-log` and `biocypher-out` are created that contain logging information and output files, respectively.
 
-You can use this template in GitHub directly. Just select 
-`biocypher/project-template` as your template when creating a new repository
-on GitHub.
+## Knowledge graph architecture
 
-## ⚙️ Installation (local, for docker see below)
+The KG that is build from the raw data contains the following node and edge types, in accordance with the [`BIOLINK` ontology](https://bioportal.bioontology.org/ontologies/BIOLINK)
 
-> [!NOTE]
-> These are manual installation instructions. If you created the repository
-> using the above GitHub template functionality, you don't need to do the
-> first two steps. Instead, just clone the repository you have created.
+**Node types**:
+- `protein` (base node)
+The node labels are inferred from the `source` and `target` columns (uniprot id's). 
 
-1. Clone this repository and rename to your project name.
-```{bash}
-git clone https://github.com/biocypher/project-template.git
-mv project-template my-project
-cd my-project
-```
-2. Make the repository your own.
-```{bash}
-rm -rf .git
-git init
-git add .
-git commit -m "Initial commit"
-# (you can add your remote repository here)
-```
-3. Install the dependencies. We recommend [uv](https://docs.astral.sh/uv/) for best performance, but [Poetry](https://python-poetry.org/) is also supported:
+**Edge types**:
+- `protein protein interaction` (base edge)
+- `activation`
+- `binding`
+- `inhibition`
+- `phosphorylation`
+- `ubiquitination`
 
-!!! Note:
-    The BioCypher project is in the process of migrating to uv.
-    We recommend all users adopt uv, as backward compatibility with Poetry is planned to be phased out in future versions.
+Edge-specific properties are derived from input columns such as `is_directed`, `is_stimulation`, and consensus flags.
 
-**Using uv (recommended):**
-```{bash}
-uv sync
-```
+## Source Data
 
-**Using Poetry:**
-```{bash}
-poetry install
-```
+The expected TSV columns in the source data are:
+- `source`, `target`
+- `source_genesymbol`, `target_genesymbol`
+- `is_directed`, `is_stimulation`, `is_inhibition`
+- `consensus_direction`, `consensus_stimulation`, `consensus_inhibition`
+- `type`
+- `ncbi_tax_id_source`, `entity_type_source`
+- `ncbi_tax_id_target`, `entity_type_target`
 
-1. You are ready to go!
+The `type` column is matched (case-insensitive) to edge labels via regex in the mapping file. The final KG looks like this:
+![SKG](graph.png)
 
-**With uv:**
-```{bash}
-uv run python create_knowledge_graph.py
-```
+## Installation
 
-**With Poetry:**
-```{bash}
-poetry run python create_knowledge_graph.py
+Create a Python environment and install the package from `pyproject.toml` into your environment, ie.
+
+```bash
+conda create --name biocypher-adapter python=3.13
+conda activate biocypher-adapter
+pip install uv
+uv pip install -e .
 ```
 
-## 🛠 Usage
+This will install all the necessary libraries for you.
 
-### Structure
-The project template is structured as follows:
+## Build the knowledge graph
+
+First, you need to update the `import_call_bin_prefix:` in `config/biocypher_config.yaml` to point to your Neo4j instance and database (for instructions, follow [the tutorial](https://biocypher.org/BioCypher/learn/tutorials/tutorial_basics_neo4j_offline/tutorial_004_neo4j_offline/)).
+
+To then build the KG, run the following from the repository root:
+
+```bash
+python create_knowledge_graph.py 
 ```
-.
-│  # Project setup
-│
-├── LICENSE
-├── README.md
-├── pyproject.toml
-│
-│  # Docker setup
-│
-├── Dockerfile
-├── docker
-│   ├── biocypher_entrypoint_patch.sh
-│   ├── create_table.sh
-│   └── import.sh
-├── docker-compose.yml
-├── docker-variables.env
-│
-│  # Project pipeline
-│
-├── create_knowledge_graph.py
-├── config
-│   ├── biocypher_config.yaml
-│   ├── biocypher_docker_config.yaml
-│   └── schema_config.yaml
-└── template_package
-    └── adapters
-        └── example_adapter.py
+After a successful run, BioCypher writes timestamped output directories under `biocypher-out/`, containing:
+
+- node CSV header and part files (for example `Protein-header.csv`, `Protein-part000.csv`)
+- edge CSV header and part files per relation type
+- `neo4j-admin-import-call.sh` (generated import command script)
+
+Runtime logs are written to `biocypher-log/`.
+
+## Import the graph into Neo4j
+
+Each generated output folder includes a ready-to-run script:
+
+```bash
+bash biocypher-out/<timestamp>/neo4j-admin-import-call.sh
 ```
+Run this script while the Neo4j instance is stopped, to import the graph into your instance as specified in the `biocypher_config.yaml`.
 
-The main components of the BioCypher pipeline are the
-`create_knowledge_graph.py`, the configuration in the `config` directory, and
-the adapter module in the `template_package` directory. The latter can be used
-to publish your own adapters (see below). You can also use other adapters from
-anywhere on GitHub, PyPI, or your local machine.
+## Configuration Notes
 
-**The BioCypher ecosystem relies on the collection of adapters (planned, in
-development, or already available) to inform the community about the available
-data sources and to facilitate the creation of knowledge graphs. If you think
-your adapter could be useful for others, please create an issue for it on the
-[main BioCypher repository](https://github.com/biocypher/biocypher/issues).**
+### BioCypher config (`config/biocypher_config.yaml`)
 
-In addition, the docker setup is provided to run the pipeline (from the same
-python script) in a docker container, and subsequently load the knowledge graph
-into a Neo4j instance (also from a docker container). This is useful if you want
-to run the pipeline on a server, or if you want to run it in a reproducible
-environment.
+- points schema to `config/schema_config.yaml`
+- sets delimiter and array delimiter for Neo4j CSV generation
+- includes a configured `neo4j.import_call_bin_prefix` that each user has to set to their own Neo4j instance
 
-### Running the pipeline
+### Schema config (`config/schema_config.yaml`)
 
-`python create_knowledge_graph.py` will create a knowledge graph from the
-example data included in this repository (borrowed from the [BioCypher
-tutorial](https://biocypher.org/BioCypher/learn/tutorials/tutorial001_basics/)).
-To do that, it uses the following components:
+- uses `input_label` fields to map OntoWeaver output labels to schema concepts
+- defines base and inherited nodes/edges and sets edge properties
 
-- `create_knowledge_graph.py`: the main script that orchestrates the pipeline.
-It brings together the BioCypher package with the data sources. To build a 
-knowledge graph, you need at least one adapter (see below). For common 
-resources, there may already be an adapter available in the BioCypher package or
-in a separate repository. You can also write your own adapter, should none be
-available for your data.
+## Adapter and dataset metadata
+The adapter and dataset metadata is contained in the [`croissant`](croissant.jsonld) file.
 
-- `example_adapter.py` (in `template_package.adapters`): a module that defines
-the adapter to the data source. In this case, it is a random generator script.
-If you want to create your own adapters, we recommend to use the example adapter
-as a blueprint and create one python file per data source, approproately named.
-You can then import the adapter in `create_knowledge_graph.py` and add it to
-the pipeline. This way, you ensure that others can easily install and use your 
-adapters.
+## BioCypher MCP-Informed Documentation
 
-- `schema_config.yaml`: a configuration file (found in the `config` directory)
-that defines the schema of the knowledge graph. It is used by BioCypher to map
-the data source to the knowledge representation on the basis of ontology (see
-[this part of the BioCypher 
-tutorial](https://biocypher.org/BioCypher/learn/tutorials/tutorial002_handling_ontologies/)).
+This README structure follows BioCypher MCP guidance for adapter documentation:
 
-- `biocypher_config.yaml`: a configuration file (found in the `config` 
-directory) that defines some BioCypher parameters, such as the mode, the 
-separators used, and other options. More on its use can be found in the
-[Documentation](https://biocypher.org/BioCypher/reference/biocypher-config/).
+- clear data contract and schema mapping (`input_label` alignment)
+- explicit execution and output workflow
+- resource and import operational notes
+- maintenance-friendly troubleshooting section
 
-### Publishing your own adapters
+## Troubleshooting
 
-After adding your adapter(s) to the `adapters` directory, you may want to
-publish them for easier reuse. To create a package to distribute your own
-adapter(s), we recommend using [uv](https://docs.astral.sh/uv/). uv,
-after setup, allows you to build and publish your package to PyPI using simple
-commands. To set up your package, rename the `template_package` directory to
-your desired package name and update the `pyproject.toml` file accordingly. Most
-importantly, update the `name`,`author`, and `version` fields. You can also add
-a `description` and a `license`.  Then, you can build and publish your package to PyPI
-using the following commands:
+- Command not found: ensure `ontoweave` is installed and on `PATH`.
+- No output produced: check `biocypher-log/` for parsing or mapping errors.
+- Unexpected edge labels: verify `type` values against regex rules in `config/protein_interactions_mapping.yaml`.
+- Neo4j import warnings: inspect `neo4j-admin-import-call.sh` and confirm local Neo4j binary path in `config/biocypher_config.yaml`.
 
-```{bash}
-uv build
-uv publish
-```
+## License
 
-```{bash}
-poetry build
-poetry publish
-```
-
-If you don't want to publish your package to PyPI, you can also install it from
-GitHub using uv or pip.
-
-### Further reading / code
-
-If you want to see a second example of the workflow, check our
-[CollecTRI](https://github.com/biocypher/collectri) pipeline. Its README describes
-the process of data assessment and adapter creation in more detail.
-
-## 🐳 Docker
-
-This repo also contains a `docker compose` workflow to create the example
-database using BioCypher and load it into a dockerised Neo4j instance
-automatically. To run it, simply execute `docker compose up -d` in the root 
-directory of the project. This will start up a single (detached) docker
-container with a Neo4j instance that contains the knowledge graph built by
-BioCypher as the DB `neo4j` (the default DB), which you can connect to and
-browse at localhost:7474. Authentication is deactivated by default and can be
-modified in the `docker_variables.env` file (in which case you need to provide
-the .env file to the deploy stage of the `docker-compose.yml`).
-
-Regarding the BioCypher build procedure, the `biocypher_docker_config.yaml` file
-is used instead of the `biocypher_config.yaml` (configured in
-`scripts/build.sh`). Everything else is the same as in the local setup. The
-first container (`build`) installs and runs the BioCypher pipeline, the second
-container (`import`) installs Neo4j and runs the import, and the third container
-(`deploy`) deploys the Neo4j instance on localhost. The files are shared using a
-Docker Volume. This three-stage setup strictly is not necessary for the mounting
-of a read-write instance of Neo4j, but is required if the purpose is to provide
-a read-only instance (e.g. for a web app) that is updated regularly; for an
-example, see the [meta graph
-repository](https://github.com/biocypher/meta-graph). The read-only setting is
-configured in the `docker-compose.yml` file
-(`NEO4J_dbms_databases_default__to__read__only: "false"`) and is deactivated by
-default.
+MIT (see `LICENSE`).

@@ -4,7 +4,7 @@
 #====   PARENT NODES
 protein:
     represented_as: node
-    preferred_id: uniprot
+    namespace: uniprot
     input_label: uniprot_protein
 
 #-------------------------------------------------------------------

@@ -3,12 +3,11 @@ from itertools import chain
 from typing import Optional, Generator
 from pathlib import Path
 
-
 import pandas as pd
 from biocypher._logger import logger
 
-
-TSV_FILE_PATH_SYNTHETIC_PROTEINS = Path("./cache/synthetic_protein_interactions.tsv")
+repo_root = Path(__file__).resolve().parents[2]
+TSV_FILE_PATH_SYNTHETIC_PROTEINS = repo_root / "data" / "in" / "synthetic_protein_interactions.tsv"
 
 class AdapterNodeType(Enum):
     """
