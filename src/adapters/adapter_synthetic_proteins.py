@@ -1,4 +1,3 @@
-import os
 from enum import Enum, auto
 from itertools import chain
 from typing import Optional, Generator
@@ -6,7 +5,6 @@ from pathlib import Path
 
 
 import pandas as pd
-from biocypher import BioCypher
 from biocypher._logger import logger
 
 
@@ -58,7 +56,7 @@ class AdapterProteinProteinEdgeField(Enum):
 class Adapter:
     def __init__(
         self,
-        tsv_path: str = TSV_FILE_PATH_SYNTHETIC_PROTEINS,
+        tsv_path: str | Path = TSV_FILE_PATH_SYNTHETIC_PROTEINS,
         node_types: Optional[list] = None,
         node_fields: Optional[list] = None,
         edge_types: Optional[list] = None,
@@ -83,6 +81,7 @@ class Adapter:
         required_columns = [
             'source', 'target', 'source_genesymbol', 'target_genesymbol',
             'ncbi_tax_id_source', 'ncbi_tax_id_target', 'type',
+            'entity_type_source', 'entity_type_target',
             'is_directed', 'is_stimulation', 'is_inhibition', 'consensus_direction',
             'consensus_stimulation', 'consensus_inhibition'
         ]
@@ -102,11 +101,15 @@ class Adapter:
         """
         logger.info("Reading nodes.")
         df = self._read_tsv()
+        seen_nodes = set()
 
         # Generator for nodes in the `source` column
         for row in df.itertuples(index=False):
-            id = row.source
+            id_ = str(row.source)
             input_label = "uniprot_protein"
+
+            if id_ in seen_nodes:
+                continue
 
             properties = {
                 'genesymbol': row.source_genesymbol,
@@ -114,16 +117,21 @@ class Adapter:
                 'entity_type': row.entity_type_source,
             }
 
+            seen_nodes.add(id_)
+
             yield(
-                id,
+                id_,
                 input_label,
                 properties
             )
 
         # Generator for nodes in the `target` column
         for row in df.itertuples(index=False):
-            id = row.target
+            id_ = str(row.target)
             input_label = "uniprot_protein"
+
+            if id_ in seen_nodes:
+                continue
 
             properties = {
                 'genesymbol': row.target_genesymbol,
@@ -131,8 +139,10 @@ class Adapter:
                 'entity_type': row.entity_type_target,
             }
 
+            seen_nodes.add(id_)
+
             yield(
-                id,
+                id_,
                 input_label,
                 properties
             )
@@ -149,14 +159,12 @@ class Adapter:
         df = self._read_tsv()
 
         for row in df.itertuples(index=False):
-            # Concatenate source and target, i.e., "SOD1EGFR"
-            id = f"{row.source}{row.target}"
+            source = str(row.source)
+            target = str(row.target)
+            type = str(row.type)
 
-            source = row.source
-
-            target = row.target
-
-            type = row.type
+            # Include edge type in ID to avoid collisions across interaction types.
+            id = f"{source}_{target}_{type}"
 
             properties = {
                 'is_directed': row.is_directed,
