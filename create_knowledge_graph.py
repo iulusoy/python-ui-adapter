@@ -1,5 +1,5 @@
 from biocypher import BioCypher, FileDownload
-from template_package.adapters.adapter_synthetic_proteins import (
+from src.adapters.adapter_synthetic_proteins import (
     AdapterNodeType,
     AdapterProteinField,
     AdapterEdgeType,
