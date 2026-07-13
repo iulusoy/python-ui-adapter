@@ -25,7 +25,7 @@ jobs:
     - name: Install dependencies
       run: |
         pip install uv
-        uv pip install --system --no-cache-dir -e .
+        uv pip install --system --no-cache-dir -e .["test"]
     - name: Run pytest 
       run: |
         python -m pytest -svv
