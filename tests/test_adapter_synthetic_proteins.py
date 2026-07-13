@@ -55,7 +55,7 @@ def test_read_tsv_raises_on_missing_required_columns(tmp_path: Path) -> None:
     adapter = Adapter(tsv_path=tsv)
 
     with pytest.raises(ValueError):
-        list(adapter.get_nodes())
+        next(adapter.get_nodes())
 
 
 def test_get_nodes_are_deduplicated_and_schema_shaped(valid_tsv: Path) -> None:

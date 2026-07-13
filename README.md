@@ -1,135 +1,123 @@
-# BioCypher Synthetic Protein Adapter
+# BioCypher Python code adapter, synthetic protein data
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+![BioCypher](https://img.shields.io/badge/BioCypher-Adapter-0A7A5A.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Tests](https://img.shields.io/badge/Tests-pytest-6D4C41.svg)
+[![CI](https://github.com/iulusoy/python-ui-adapter/actions/workflows/ci.yaml/badge.svg)](https://github.com/iulusoy/python-ui-adapter/actions/workflows/ci.yaml)
+![Croissant Metadata](https://img.shields.io/badge/Croissant-Metadata-blue)
 
-This repository contains a BioCypher adapter that transforms a synthetic
-protein interaction TSV dataset into node and edge files for graph import.
+This repository contains the code for the Python UI pathway, to create a knowledge graph from a tabular protein interaction dataset using [BioCypher](https://biocypher.org/) and Python code. The following files and folders can be found in this repo:
 
-The adapter follows the BioCypher adapter interface and supports:
+- a synthetic input dataset (`data/in/synthetic_protein_interactions.tsv`)
+- a BioCypher schema (`config/schema_config.yaml`)
+- a BioCypher runtime config (`config/biocypher_config.yaml`)
+- Python code to prepare the nodes and edges tuples for BioCypher (`src/adapters/adapter_syntehtic_proteins.py`)
 
-- Protein node creation with deduplication.
-- Typed protein-protein interaction edges.
-- Validation of required TSV columns before processing.
-- Offline file export for Neo4j bulk import.
+The `data` folder is thus responsible for holding the input data (the dataset can also be pulled from the web on-the-fly, but for convenience we have included it here). The `config` folder contains all configuration files. Upon running `create_knowledge_graph.py`, the directories `biocypher-log` and `biocypher-out` are created that contain logging information and output files, respectively.
 
-## Repository Layout
+## Knowledge graph architecture
 
-```
-.
-├── create_knowledge_graph.py
-├── config/
-│   ├── biocypher_config.yaml
-│   └── schema_config.yaml
-├── src/
-│   └── adapters/
-│       └── adapter_synthetic_proteins.py
-├── tests/
-│   └── test_adapter_synthetic_proteins.py
-├── pyproject.toml
-└── croissant.jsonld
-```
+The KG that is build from the raw data contains the following node and edge types, in accordance with the [`BIOLINK` ontology](https://bioportal.bioontology.org/ontologies/BIOLINK)
 
-## Data Source
+**Node types**:
+- `protein` (base node)
+The node labels are inferred from the `source` and `target` columns (uniprot id's). 
 
-The pipeline downloads:
+**Edge types**:
+- `protein protein interaction` (base edge)
+- `activation`
+- `binding`
+- `inhibition`
+- `phosphorylation`
+- `ubiquitination`
 
-- https://zenodo.org/records/16902349/files/synthetic_protein_interactions.tsv
+Edge-specific properties are derived from input columns such as `is_directed`, `is_stimulation`, and consensus flags.
 
-Expected input columns are validated in the adapter before generation:
+## Source Data
 
-- source, target
-- source_genesymbol, target_genesymbol
-- ncbi_tax_id_source, ncbi_tax_id_target
-- entity_type_source, entity_type_target
-- type
-- is_directed, is_stimulation, is_inhibition
-- consensus_direction, consensus_stimulation, consensus_inhibition
+The expected TSV columns in the source data are:
+- `source`, `target`
+- `source_genesymbol`, `target_genesymbol`
+- `is_directed`, `is_stimulation`, `is_inhibition`
+- `consensus_direction`, `consensus_stimulation`, `consensus_inhibition`
+- `type`
+- `ncbi_tax_id_source`, `entity_type_source`
+- `ncbi_tax_id_target`, `entity_type_target`
+
+The `type` column is matched (case-insensitive) to edge labels via regex in the mapping file. The final KG looks like this:
+![SKG](graph.png)
 
 ## Installation
 
-Using uv:
+Create a Python environment and install the package from `pyproject.toml` into your environment, ie.
 
 ```bash
+conda create --name biocypher-adapter python=3.13
+conda activate biocypher-adapter
+pip install uv
 uv pip install -e .
 ```
 
-Install test dependencies:
+This will install all the necessary libraries for you.
+
+## Build the knowledge graph
+
+First, you need to update the `import_call_bin_prefix:` in `config/biocypher_config.yaml` to point to your Neo4j instance and database (for instructions, follow [the tutorial](https://biocypher.org/BioCypher/learn/tutorials/tutorial_basics_neo4j_offline/tutorial_004_neo4j_offline/)).
+
+To then build the KG, run the following from the repository root:
 
 ```bash
-uv pip install -e .[test]
+python create_knowledge_graph.py 
 ```
+After a successful run, BioCypher writes timestamped output directories under `biocypher-out/`, containing:
 
-## Usage
+- node CSV header and part files (for example `Protein-header.csv`, `Protein-part000.csv`)
+- edge CSV header and part files per relation type
+- `neo4j-admin-import-call.sh` (generated import command script)
 
-Run the pipeline:
+Runtime logs are written to `biocypher-log/`.
+
+## Import the graph into Neo4j
+
+Each generated output folder includes a ready-to-run script:
 
 ```bash
-python create_knowledge_graph.py
+bash biocypher-out/<timestamp>/neo4j-admin-import-call.sh
 ```
-
-This generates timestamped output under:
-
-- biocypher-out/
-
-and logs under:
-
-- biocypher-log/
-
-### What gets written
-
-- Protein nodes from unique source/target identifiers.
-- Interaction edges for binding, activation, inhibition,
-  phosphorylation, and ubiquitination.
-- A Neo4j import helper script in the output folder.
-
-## Testing and Validation
-
-Run all tests:
-
-```bash
-python -m pytest -q
-```
-
-The suite in tests/test_adapter_synthetic_proteins.py covers:
-
-- Missing-column validation failures.
-- Node deduplication and shape checks.
-- Edge ID uniqueness and edge field shape checks.
-- Relationship integrity (edge endpoints exist as nodes).
-- Integration-style checks of generated headers vs schema mappings.
+Run this script while the Neo4j instance is stopped, to import the graph into your instance as specified in the `biocypher_config.yaml`.
 
 ## Configuration Notes
 
-- Node and edge schema mappings are defined in config/schema_config.yaml.
-- Runtime and Neo4j export settings are defined in config/biocypher_config.yaml.
-- The schema uses namespace for node identifier namespace conventions.
+### BioCypher config (`config/biocypher_config.yaml`)
+
+- points schema to `config/schema_config.yaml`
+- sets delimiter and array delimiter for Neo4j CSV generation
+- includes a configured `neo4j.import_call_bin_prefix` that each user has to set to their own Neo4j instance
+
+### Schema config (`config/schema_config.yaml`)
+
+- uses `input_label` fields to map OntoWeaver output labels to schema concepts
+- defines base and inherited nodes/edges and sets edge properties
+
+## Adapter and dataset metadata
+The adapter and dataset metadata is contained in the [`croissant`](croissant.jsonld) file.
+
+## BioCypher MCP-Informed Documentation
+
+This README structure follows BioCypher MCP guidance for adapter documentation:
+
+- clear data contract and schema mapping (`input_label` alignment)
+- explicit execution and output workflow
+- resource and import operational notes
+- maintenance-friendly troubleshooting section
 
 ## Troubleshooting
 
-1. Import errors when running create_knowledge_graph.py:
-Use the repository root as working directory and ensure editable install is
-active.
+- Command not found: ensure `ontoweave` is installed and on `PATH`.
+- No output produced: check `biocypher-log/` for parsing or mapping errors.
+- Unexpected edge labels: verify `type` values against regex rules in `config/protein_interactions_mapping.yaml`.
+- Neo4j import warnings: inspect `neo4j-admin-import-call.sh` and confirm local Neo4j binary path in `config/biocypher_config.yaml`.
 
-2. Warning about edge_labels_order in log output:
-Set neo4j.edge_labels_order: Leaves in config/biocypher_config.yaml to align
-with Neo4j import expectations.
+## License
 
-3. Duplicate edge type warnings:
-The source dataset can emit repeated interaction classes; this is expected in
-some runs and does not indicate missing labels.
-
-4. Dataset download or cache issues:
-Clear .cache and rerun to refresh downloaded resources.
-
-## Maintenance Guide
-
-When extending the adapter:
-
-1. Add new required input fields to _read_tsv validation.
-2. Update emitted node or edge properties in adapter_synthetic_proteins.py.
-3. Synchronize schema changes in config/schema_config.yaml.
-4. Add or update tests in tests/test_adapter_synthetic_proteins.py.
-5. Run python -m pytest -q before committing.
-
-## Versioning
-
-Package metadata is maintained in pyproject.toml.
-Dataset and tool metadata are described in croissant.jsonld.
+MIT (see `LICENSE`).

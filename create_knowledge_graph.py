@@ -1,28 +1,14 @@
-from biocypher import BioCypher, FileDownload
+from biocypher import BioCypher
 from src.adapters.adapter_synthetic_proteins import (
     AdapterNodeType,
     AdapterProteinField,
     AdapterEdgeType,
     Adapter,
+    TSV_FILE_PATH_SYNTHETIC_PROTEINS
 )
 
 # Create an instance of BioCypher
 bc = BioCypher()
-
-# Download the file with cache capabilities
-url_dataset = (
-    "https://zenodo.org/records/16902349/files/synthetic_protein_interactions.tsv"
-)
-
-resource = FileDownload(
-    name="protein-protein-interaction-dataset",  # Name of the resource
-    url_s=url_dataset,  # URL to the resource(s)
-    lifetime=7,  # seven days cache lifetime
-)
-paths = bc.download(resource)  # Downloads to '.cache' by default
-
-print(f"Path to the resouce: {paths}")
-
 
 # Choose the node type you want appear in the Knowledge Graph
 node_types = [AdapterNodeType.PROTEIN]
@@ -50,7 +36,7 @@ edge_types = [
 
 # Create an adapter instance
 adapter = Adapter(
-    tsv_path=paths[0],
+    tsv_path=TSV_FILE_PATH_SYNTHETIC_PROTEINS,
     node_types=node_types,
     node_fields=node_fields,
     edge_types=edge_types,
